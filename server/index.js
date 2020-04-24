@@ -9,7 +9,7 @@ const wsServer = new webSocketServer({
 });
 
 // Generates unique ID for every new connection
-const getUniqueID = () => {
+const getUniqueId = () => {
   const s4 = () => Math.floor((1 + Math.random()) * 0x10000).toString(16).substring(1);
   return s4() + s4() + '-' + s4();
 };
@@ -26,67 +26,114 @@ let editorContent = null;
 // player activity history.
 let playerActivity = [];
 
-const sendMessage = (json) => {
-  // We are sending the current data to all connected clients
+const typesDef = {
+  BROADCAST: "broadcastevent",
+  PLAYER_REGISTER_EVENT: "playerregisterevent",
+  TABLE_REGISTER_EVENT: "tableregisterevent",
+  TABLE_JOIN_EVENT: "tablejoinevent",
+  GAME_SETUP_EVENT: "gamesetupevent",
+  GAME_START_EVENT: "gamestartevent"  
+}
+
+// Send json data to all connected clients
+const broadcastToAll = (json) => {
   Object.keys(clients).map((client) => {
     clients[client].sendUTF(json);
   });
 }
 
-const typesDef = {
-  PLAYER_EVENT: "playerevent",
-  TABLE_EVENT: "tableevent",
-  CONTENT_CHANGE: "contentchange",
-  TABLE_CHANGE: "tablechange"
+// Send updates about the current game to all players in the current game
+const broadcastToPlayers = (currentTable, type) => {
+
+  console.log(clients);
+  currentTable.currentGame.players.map((player) => {
+    var playerId = player.playerId;
+    var json = { type: type };
+    json.data = {currentTable: currentTable};
+    clients[playerId].sendUTF(JSON.stringify(json));
+  });
 }
 
+
 wsServer.on('request', function(request) {
-  var playerID = getUniqueID();
+  var playerId = getUniqueId();
   console.log((new Date()) + ' Recieved a new connection from origin ' + request.origin + '.');
   // You can rewrite this part of the code to accept only the requests from allowed origin
   const connection = request.accept(null, request.origin);
-  clients[playerID] = connection;
-  console.log('connected: ' + playerID + ' in ' + Object.getOwnPropertyNames(clients));
+  clients[playerId] = connection;
+  console.log('connected: ' + playerId + ' in ' + Object.getOwnPropertyNames(clients));
   connection.on('message', function(message) {
+
     if (message.type === 'utf8') {
+      console.log("JSON dataFromClient");
       const dataFromClient = JSON.parse(message.utf8Data);
-      const json = { type: dataFromClient.type };
-      if (dataFromClient.type === typesDef.PLAYER_EVENT) {
-        players[playerID] = { username: dataFromClient.username,
+      const broadcastJson = { type: typesDef.BROADCAST };
+      const specificJson = { type: dataFromClient.type };
+
+      if (dataFromClient.type === typesDef.PLAYER_REGISTER_EVENT) {
+        // Create a new player
+        players[playerId] = { username: dataFromClient.username,
                               tableAdmin: dataFromClient.tableAdmin };
-        playerActivity.push(`${dataFromClient.username} joined to edit the document`);
-        json.data = { players, playerActivity };
-      } else if (dataFromClient.type === typesDef.TABLE_EVENT) {
-        console.log("datafromclient");
-        console.log(dataFromClient);
-        var tableID = dataFromClient.tableid;
-        var currentTable = { tablename: dataFromClient.tablename,
-                            numPlayers: 1,
-                            dicePerPlayer: dataFromClient.numdice };
-        tables[tableID] = currentTable;
-        console.log("tables");
-        console.log(tables);
-        playerActivity.push(`${players[playerID]} created a new table, ${dataFromClient.tablename}`);
-        json.data = { players, tables, currentTable, playerActivity };
-        console.log("json");
-        console.log(json.data);
-      }else if (dataFromClient.type === typesDef.CONTENT_CHANGE) {
-        editorContent = dataFromClient.content;
-        json.data = { editorContent, playerActivity };
+        playerActivity.push(`${dataFromClient.username} registered as a player`);
+
+      } else if (dataFromClient.type === typesDef.TABLE_REGISTER_EVENT) {
+        // Create a new table and a new game within this table
+        var tableId = dataFromClient.tableId;
+        var game = { totalNumDice: null,
+                     currentTurn: (0, null),
+                     previousTurn: (null, null),
+                     players: [{ playerId: playerId, numDice: dataFromClient.numDice, diceVals: null }] }
+        var currentTable = { tableId: tableId,
+                             tablename: dataFromClient.tablename,
+                             dicePerPlayer: dataFromClient.numDice,
+                             adminId: playerId,
+                             adminUsername: players[playerId].username,
+                             currentGame: game };
+        tables[tableId] = currentTable;
+        playerActivity.push(`${players[playerId].username} created a new table, ${dataFromClient.tablename}`);
+        broadcastToPlayers(currentTable, typesDef.TABLE_REGISTER_EVENT);
+
+      } else if (dataFromClient.type === typesDef.TABLE_JOIN_EVENT) {
+        // Add a new player to the current game of the current table
+        var tableId = dataFromClient.tableId;
+        var currentTable = tables[tableId];
+        var numDice = tables[tableId].dicePerPlayer;
+        var game = { playerId: playerId,
+                     numDice: numDice, 
+                     diceVals: null }
+        currentTable.currentGame.players.push(game);
+        console.log("currentTable");
+        console.log(currentTable);
+        playerActivity.push(`${players[playerId].username} joined a table, ${currentTable.tablename}`);
+        broadcastToPlayers(currentTable, typesDef.TABLE_JOIN_EVENT);
+
+      } else if (dataFromClient.type === typesDef.GAME_SETUP_EVENT) {
+        // Calculate total number of dice to start, save the original game configuration
+        var currentTable = tables[dataFromClient.tableId];
+        var dicePerPlayer = currentTable.dicePerPlayer;
+        var numPlayers = currentTable.currentGame.players.length;
+        currentTable.currentGame.totalNumDice = dicePerPlayer * numPlayers;
+        currentTable.originalGame = currentTable.currentGame;
+        broadcastToPlayers(currentTable, typesDef.GAME_SETUP_EVENT);
+
       }
-      sendMessage(JSON.stringify(json));
-      console.log("tables**");
-      console.log(tables);
+      
+      // Broadcast some JSON data to all connections, send others to a specific connection
+      broadcastJson.data = { players, tables, playerActivity };
+      broadcastToAll(JSON.stringify(broadcastJson));
+      
+      console.log("JSON broadcast");
+      console.log(broadcastJson.data);
     }
   });
   // player disconnected
   connection.on('close', function(connection) {
-    console.log((new Date()) + " Peer " + playerID + " disconnected.");
+    console.log((new Date()) + " Peer " + playerId + " disconnected.");
     const json = { type: typesDef.PLAYER_EVENT };
-    playerActivity.push(`${players[playerID].username} left the document`);
+    playerActivity.push(`${players[playerId].username} left the document`);
     json.data = { players, playerActivity };
-    delete clients[playerID];
-    delete players[playerID];
-    sendMessage(JSON.stringify(json));
+    delete clients[playerId];
+    delete players[playerId];
+    broadcastToAll(JSON.stringify(json));
   });
 });
