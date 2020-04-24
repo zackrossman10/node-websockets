@@ -16,14 +16,15 @@ const getUniqueID = () => {
 
 // I'm maintaining all active connections in this object
 const clients = {};
-// I'm maintaining all active users in this object
-const users = {};
+// I'm maintaining all active players in this object
+const players = {};
+// I'm maintaining all active tables in this object
+const tables = {};
+
 // The current editor content is maintained here.
 let editorContent = null;
-// User activity history.
-let userActivity = [];
-
-
+// player activity history.
+let playerActivity = [];
 
 const sendMessage = (json) => {
   // We are sending the current data to all connected clients
@@ -33,40 +34,59 @@ const sendMessage = (json) => {
 }
 
 const typesDef = {
-  USER_EVENT: "userevent",
-  CONTENT_CHANGE: "contentchange"
+  PLAYER_EVENT: "playerevent",
+  TABLE_EVENT: "tableevent",
+  CONTENT_CHANGE: "contentchange",
+  TABLE_CHANGE: "tablechange"
 }
 
 wsServer.on('request', function(request) {
-  var userID = getUniqueID();
+  var playerID = getUniqueID();
   console.log((new Date()) + ' Recieved a new connection from origin ' + request.origin + '.');
   // You can rewrite this part of the code to accept only the requests from allowed origin
   const connection = request.accept(null, request.origin);
-  clients[userID] = connection;
-  console.log('connected: ' + userID + ' in ' + Object.getOwnPropertyNames(clients));
+  clients[playerID] = connection;
+  console.log('connected: ' + playerID + ' in ' + Object.getOwnPropertyNames(clients));
   connection.on('message', function(message) {
     if (message.type === 'utf8') {
       const dataFromClient = JSON.parse(message.utf8Data);
       const json = { type: dataFromClient.type };
-      if (dataFromClient.type === typesDef.USER_EVENT) {
-        users[userID] = dataFromClient;
-        userActivity.push(`${dataFromClient.username} joined to edit the document`);
-        json.data = { users, userActivity };
-      } else if (dataFromClient.type === typesDef.CONTENT_CHANGE) {
+      if (dataFromClient.type === typesDef.PLAYER_EVENT) {
+        players[playerID] = { username: dataFromClient.username,
+                              tableAdmin: dataFromClient.tableAdmin };
+        playerActivity.push(`${dataFromClient.username} joined to edit the document`);
+        json.data = { players, playerActivity };
+      } else if (dataFromClient.type === typesDef.TABLE_EVENT) {
+        console.log("datafromclient");
+        console.log(dataFromClient);
+        var tableID = dataFromClient.tableid;
+        var currentTable = { tablename: dataFromClient.tablename,
+                            numPlayers: 1,
+                            dicePerPlayer: dataFromClient.numdice };
+        tables[tableID] = currentTable;
+        console.log("tables");
+        console.log(tables);
+        playerActivity.push(`${players[playerID]} created a new table, ${dataFromClient.tablename}`);
+        json.data = { players, tables, currentTable, playerActivity };
+        console.log("json");
+        console.log(json.data);
+      }else if (dataFromClient.type === typesDef.CONTENT_CHANGE) {
         editorContent = dataFromClient.content;
-        json.data = { editorContent, userActivity };
+        json.data = { editorContent, playerActivity };
       }
       sendMessage(JSON.stringify(json));
+      console.log("tables**");
+      console.log(tables);
     }
   });
-  // user disconnected
+  // player disconnected
   connection.on('close', function(connection) {
-    console.log((new Date()) + " Peer " + userID + " disconnected.");
-    const json = { type: typesDef.USER_EVENT };
-    userActivity.push(`${users[userID].username} left the document`);
-    json.data = { users, userActivity };
-    delete clients[userID];
-    delete users[userID];
+    console.log((new Date()) + " Peer " + playerID + " disconnected.");
+    const json = { type: typesDef.PLAYER_EVENT };
+    playerActivity.push(`${players[playerID].username} left the document`);
+    json.data = { players, playerActivity };
+    delete clients[playerID];
+    delete players[playerID];
     sendMessage(JSON.stringify(json));
   });
 });
