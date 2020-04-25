@@ -44,8 +44,6 @@ const broadcastToAll = (json) => {
 
 // Send updates about the current game to all players in the current game
 const broadcastToPlayers = (currentTable, type) => {
-
-  console.log(clients);
   currentTable.currentGame.players.map((player) => {
     var playerId = player.playerId;
     var json = { type: type };
@@ -54,6 +52,47 @@ const broadcastToPlayers = (currentTable, type) => {
   });
 }
 
+ const shakeDice = (numDice) => {
+  var dice = []
+  for (var i = 0; i < numDice; i++) {
+    // Generate random number between 1 and 6
+    var random = Math.floor(Math.random() * 6) + 1 ;
+    dice.push(random);
+  }
+  return dice;
+ }
+
+ const calculateTotals = (players) => {
+  // Indices 0-1 are not used, indices 2-6 hold total number of that dice number
+  var diceTotals = [0,0,0,0,0,0,0]
+  players.map((player) => {
+    player.diceVals.map((die) => {
+      switch(die) {
+        case 1:
+          diceTotals = diceTotals.map((total) => total + 1);
+          break;
+        case 2: 
+          diceTotals[2] = diceTotals[2] + 1;
+          break;
+        case 3: 
+          diceTotals[3] = diceTotals[3] + 1;
+          break;
+        case 4: 
+          diceTotals[4] = diceTotals[4] + 1;
+          break;
+        case 5: 
+          diceTotals[5] = diceTotals[5] + 1;
+          break;
+        case 6: 
+          diceTotals[6] = diceTotals[6] + 1;
+          break;
+      }
+    });
+  });
+  console.log("Calculated dice totals");
+  console.log(diceTotals);
+  return diceTotals;
+}
 
 wsServer.on('request', function(request) {
   var playerId = getUniqueId();
@@ -80,8 +119,11 @@ wsServer.on('request', function(request) {
         // Create a new table and a new game within this table
         var tableId = dataFromClient.tableId;
         var game = { totalNumDice: null,
-                     currentTurn: (0, null),
-                     previousTurn: (null, null),
+                     diceTotals: null,
+                     currentTurn: { position: 0,
+                                    call: null },
+                     previousTurn: { position: null,
+                                     call: null },
                      players: [{ playerId: playerId, numDice: dataFromClient.numDice, diceVals: null }] }
         var currentTable = { tableId: tableId,
                              tablename: dataFromClient.tablename,
@@ -98,26 +140,38 @@ wsServer.on('request', function(request) {
         var tableId = dataFromClient.tableId;
         var currentTable = tables[tableId];
         var numDice = tables[tableId].dicePerPlayer;
-        var game = { playerId: playerId,
-                     numDice: numDice, 
-                     diceVals: null }
-        currentTable.currentGame.players.push(game);
+        var player = { playerId: playerId,
+                       numDice: numDice, 
+                       diceVals: null }
+        currentTable.currentGame.players.push(player);
         console.log("currentTable");
         console.log(currentTable);
         playerActivity.push(`${players[playerId].username} joined a table, ${currentTable.tablename}`);
         broadcastToPlayers(currentTable, typesDef.TABLE_JOIN_EVENT);
 
       } else if (dataFromClient.type === typesDef.GAME_SETUP_EVENT) {
-        // Calculate total number of dice to start, save the original game configuration
+        // Calculate total number of dice to start
         var currentTable = tables[dataFromClient.tableId];
         var dicePerPlayer = currentTable.dicePerPlayer;
         var numPlayers = currentTable.currentGame.players.length;
         currentTable.currentGame.totalNumDice = dicePerPlayer * numPlayers;
+
+        // Save the original game configuration
         currentTable.originalGame = currentTable.currentGame;
+
+        // Give the players a random set of dice for the first round
+        currentTable.currentGame.players.map((player) => {
+          player.diceVals = shakeDice(player.numDice);
+        })
+
+        // Calculate the number of each dice (aka the max call for each dice value)
+        var diceTotals = calculateTotals(currentTable.currentGame.players);
+        currentTable.currentGame.diceTotals = diceTotals;
+
         broadcastToPlayers(currentTable, typesDef.GAME_SETUP_EVENT);
 
-      }
-      
+      } 
+
       // Broadcast some JSON data to all connections, send others to a specific connection
       broadcastJson.data = { players, tables, playerActivity };
       broadcastToAll(JSON.stringify(broadcastJson));

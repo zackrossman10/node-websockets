@@ -11,12 +11,12 @@ import 'medium-editor/dist/css/medium-editor.css';
 import 'medium-editor/dist/css/themes/default.css';
 import "bootstrap/dist/css/bootstrap.css";
 import './App.css';
-import Game from "./component/Game.js";
+import PlayerCup from "./component/PlayerCup.js";
+import { NotificationManager } from "react-notifications";
+
 
 const client = new W3CWebSocket('ws://127.0.0.1:8000');
 const contentDefaultMessage = "Start writing your document here";
-
-
 
 class App extends Component {
   constructor(props) {
@@ -36,7 +36,15 @@ class App extends Component {
       TABLE_DICE_PER_PLAYER_INDEX: 2,
       TABLE_ADMIN_ID_INDEX: 3,
       TABLE_ADMIN_USERNAME_INDEX: 4,
-      TABLE_CURRENT_GAME_INDEX: 5
+      TABLE_CURRENT_GAME_INDEX: 5,
+      TABLE_ORIGINAL_GAME_INDEX: 6,
+
+      formValues: { diceQuantity: "",
+                    diceValue: "" },
+      formErrors: { diceQuantity: "",
+                    diceValue: "" },
+      formValidity: { diceQuantity: "",
+                      diceValue: "" },
     };
   }
 
@@ -101,9 +109,11 @@ class App extends Component {
   }
 
   startGame = () => {
-    return(
-      <Game />
-    )
+    const tableId = this.state.currentTable[this.state.TABLE_ID_INDEX];
+    client.send(JSON.stringify({
+        tableId,
+        type: "gamestartevent"
+    }));
   }
 
  /* When content changes, we send the
@@ -135,8 +145,7 @@ class App extends Component {
      } else if (dataFromServer.type === "gamesetupevent") {
       stateToChange.currentTable = Object.values(dataFromServer.data.currentTable);
       stateToChange.gameReady = true;
-     } else if (dataFromServer.type )
-     console.log(stateToChange);
+     }
      this.setState({
        ...stateToChange
      });
@@ -219,8 +228,131 @@ class App extends Component {
     </div>
   )
 
+  handleChange = ({ target }) => {
+    const { formValues } = this.state;
+    console.log(target);
+    formValues[target.name] = target.value;
+    this.setState({ formValues });
+    this.handleValidation(target);
+  };
+
+  handleValidation = target => {
+    const { name, value } = target;
+    console.log(value);
+    const fieldValidationErrors = this.state.formErrors;
+    const validity = this.state.formValidity;
+    const previousCall = this.state.currentTable[this.state.TABLE_CURRENT_GAME_INDEX].previousTurn.call;
+    if (name === "diceValue") {
+      // Validate dice val
+      const diceVals = [2,3,4,5,6];
+      validity[name] = diceVals.some(diceVal => diceVal == value);
+      fieldValidationErrors[name] = validity[name]
+        ? ""
+        : `${name} is required, must be between 2-6`;
+      
+      // Validate increasing calls
+      if ((validity[name]) && (previousCall != null)) {
+        var previousCallQuantity = previousCall.quantity
+        var currentCallDiceQuantity = this.state.formValues["diceQuantity"];
+        var previousCallDiceValue = previousCall.diceValue
+        var currentCallDiceValue = value
+
+        if (currentCallDiceQuantity == previousCallQuantity) {
+          validity[name] = currentCallDiceValue > previousCallDiceValue;
+          fieldValidationErrors[name] = validity[name]
+            ? ""
+            : `${name} must be larger than previous dice value (${previousCallDiceValue})`;
+        } 
+      }
+    } else if (name === "diceQuantity") {
+      var floor = 1;
+      if (previousCall != null) {
+        var previousCallQuantity = previousCall.quantity
+        var currentCallDiceQuantity = this.state.formValues["diceQuantity"];
+        var previousCallDiceValue = previousCall.diceValue
+
+        if (currentCallDiceValue <= previousCallDiceValue) {
+          floor = previousCallQuantity + 1;
+        } else {
+          floor = previousCallQuantity;
+        }
+      }
+    
+      validity[name] = value >= floor;
+      fieldValidationErrors[name] = validity[name]
+        ? ""
+        : `${name} must be at least ${previousCallDiceValue}`;
+    }
+
+    this.setState({
+      formErrors: fieldValidationErrors,
+      formValidity: validity
+    });
+  };
+
+  handleSubmit = () => {
+    return null;
+  }
+
+  showSubmitCallButton = () => {
+    const { formValues, formValidity } = this.state;
+    var validCall = Object.values(formValidity).every(Boolean)
+    if (validCall) {
+      return (
+          <button
+            type="submit"
+            className="btn btn-primary btn-block"
+            onClick={() => this.handleSubmit()}
+          >
+            Submit Call
+        </button>
+      )
+    } else {
+      return null;
+    }
+  }
+
+  showCallForm = () => (
+    <div>
+      <div className="form-group">
+        <input
+          type="number"
+          name="diceQuantity"
+          className={`form-control ${this.state.formErrors.diceQuantity ? "is-invalid" : ""}`}
+          placeholder="Dice Quantity"
+          onChange={this.handleChange}
+          value={this.state.formValues.diceQuantity}
+        />
+        <input
+          type="number"
+          name="diceValue"
+          className={`form-control ${this.state.formErrors.diceValue ? "is-invalid" : ""}`}
+          placeholder="Dice Value"
+          onChange={this.handleChange}
+          value={this.state.formValues.diceValue}
+        />
+        <div className="invalid-feedback">{this.state.formErrors.diceQuantity}</div>
+        <div className="invalid-feedback">{this.state.formErrors.diceValue}</div>
+      </div>
+      {this.showSubmitCallButton()}
+    </div>
+  )
+
   showTable = () => (
-    <Game />
+    <div className="row">
+      {this.state.currentTable[this.state.TABLE_CURRENT_GAME_INDEX].players.map(player => (
+        <div className="col-lg-6 col-md-6 col-s-12 mb-4">
+          <div className="card h-100">
+            <div className="card">
+              <div className="card-body" >
+                <PlayerCup player={ player }/>
+              </div>
+            </div>
+          </div>
+        </div>
+      ))}
+      {this.state.currentTable[this.state.TABLE_CURRENT_GAME_INDEX].currentTurn.position == this.state.playerPosition ? this.showCallForm() : null}
+    </div>
   )
 
   render() {
@@ -229,7 +361,7 @@ class App extends Component {
       username,
       tableAdmin,
       currentTable,
-      gameReady  
+      gameReady ,
     } = this.state;
     console.log(this.state);
     return (
