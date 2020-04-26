@@ -242,6 +242,7 @@ body {
 
 .container-fluid {
   padding: 0px;
+  margin-left: 40px;
 }
 
 .main-content {
