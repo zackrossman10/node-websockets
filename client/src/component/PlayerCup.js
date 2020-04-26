@@ -1,53 +1,72 @@
 import React, { Component } from 'react';
 
-
 class Die extends React.Component {
   render() {
-    return (
-      <button className="square">
-        {this.props.value}
-      </button>
-    );
+    if (this.props.highlight) {
+      return (
+        <button className="square" style={highlightStyle}>
+          {this.props.value}
+        </button>
+      );
+    } else {
+      return (
+        <button className="square">
+          {this.props.value}
+        </button>
+      );
+    }
   }
 }
 
 class PlayerCup extends React.Component {
   constructor(props) {
     super(props);
-    this.state = {
-      diceVals: this.props.player.diceVals
-    }
   }
 
-  renderDie(i) {
-    return <Die value={i} />;
+  renderDie(displayVal) {
+
+    if (displayVal == null) {
+      return null;
+    } else if (this.props.myPosition != this.props.player.playerPosition && !this.props.revealDice) {
+      return <Die value={"?"} highlight={false}/>;
+    } else if (this.props.revealDice && (this.props.call != null && 
+              (parseInt(displayVal) == this.props.call.diceValue || parseInt(displayVal) == 1))) {
+      // Highlight dice pertaining to the previous call
+      return <Die value={displayVal} highlight={true}/>;
+    } else {
+      return <Die value={displayVal} highlight={false}/>;
+    }
   }
 
   render() {
     // Stringify player's dice vals
-    this.state.diceVals = this.state.diceVals.map((val) => val.toString());
+    var diceVals = this.props.player.diceVals.map((val) => val.toString());
 
     // Fill in lost dice values with "X"
-    while(this.state.diceVals.length < 6) {
-      this.state.diceVals.push("X");
+    while(diceVals.length < 6) {
+      diceVals.push(null);
     }
 
     return (
       <div>
-        <div className="status">Status</div>
+        <div className="status">{this.props.player.username}</div>
         <div className="board-row">
-          {this.renderDie(this.state.diceVals[0])}
-          {this.renderDie(this.state.diceVals[1])}
-          {this.renderDie(this.state.diceVals[2])}
+          {this.renderDie(diceVals[0])}
+          {this.renderDie(diceVals[1])}
+          {this.renderDie(diceVals[2])}
         </div>
         <div className="board-row">
-          {this.renderDie(this.state.diceVals[3])}
-          {this.renderDie(this.state.diceVals[4])}
-          {this.renderDie(this.state.diceVals[5])}
+          {this.renderDie(diceVals[3])}
+          {this.renderDie(diceVals[4])}
+          {this.renderDie(diceVals[5])}
         </div>
       </div>
     );
   }
 }
+
+const highlightStyle = {
+  backgroundColor: "#00cc00",
+};
 
 export default PlayerCup;

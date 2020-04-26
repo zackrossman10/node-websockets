@@ -16,7 +16,6 @@ import { NotificationManager } from "react-notifications";
 
 
 const client = new W3CWebSocket('ws://127.0.0.1:8000');
-const contentDefaultMessage = "Start writing your document here";
 
 class App extends Component {
   constructor(props) {
@@ -30,21 +29,24 @@ class App extends Component {
       tableAdmin: null,
       playerPosition: null,
       gameReady: false,
+      gameOver: false,
+      revealDice: false,
 
       TABLE_ID_INDEX: 0,
       TABLE_NAME_INDEX: 1,
-      TABLE_DICE_PER_PLAYER_INDEX: 2,
-      TABLE_ADMIN_ID_INDEX: 3,
-      TABLE_ADMIN_USERNAME_INDEX: 4,
-      TABLE_CURRENT_GAME_INDEX: 5,
-      TABLE_ORIGINAL_GAME_INDEX: 6,
+      TABLE_STATUS_INDEX: 2,
+      TABLE_DICE_PER_PLAYER_INDEX: 3,
+      TABLE_ADMIN_ID_INDEX: 4,
+      TABLE_ADMIN_USERNAME_INDEX: 5,
+      TABLE_CURRENT_GAME_INDEX: 6,
+      TABLE_ORIGINAL_GAME_INDEX: 7,
 
       formValues: { diceQuantity: "",
                     diceValue: "" },
       formErrors: { diceQuantity: "",
                     diceValue: "" },
-      formValidity: { diceQuantity: "",
-                      diceValue: "" },
+      formValidity: { diceQuantity: false,
+                      diceValue: false },
     };
   }
 
@@ -66,6 +68,7 @@ class App extends Component {
         }));
       });
     }
+    document.getElementById("register_player").value = "";
   }
 
   // Generates unique ID for every new table
@@ -86,8 +89,8 @@ class App extends Component {
         tableId
       };
       client.send(JSON.stringify({
-          ...data,
-          type: "tableregisterevent"
+        ...data,
+        type: "tableregisterevent"
       }));
     }
   }
@@ -95,68 +98,120 @@ class App extends Component {
   joinTable = (table) => {
     const tableId = table.tableId;
     client.send(JSON.stringify({
-        tableId,
-        type: "tablejoinevent"
+      tableId,
+      type: "tablejoinevent"
     }));
   }
 
   setupGame = () => {
     const tableId = this.state.currentTable[this.state.TABLE_ID_INDEX];
     client.send(JSON.stringify({
-        tableId,
-        type: "gamesetupevent"
+      tableId,
+      type: "gamesetupevent"
     }));
   }
 
-  startGame = () => {
+  handleCallSubmit = () => {
     const tableId = this.state.currentTable[this.state.TABLE_ID_INDEX];
+    const playerPosition = this.state.playerPosition;
+    const callDiceQuantity = this.state.formValues.diceQuantity;
+    const callDiceValue = this.state.formValues.diceValue;
+    const data = {
+      tableId,
+      playerPosition,
+      callDiceQuantity,
+      callDiceValue
+    };
     client.send(JSON.stringify({
-        tableId,
-        type: "gamestartevent"
+        ...data,
+        type: "playercallevent"
+    }));
+
+    // Reset form values
+    this.setState({
+      formValues: { diceQuantity: "",
+                    diceValue: "" },
+      formErrors: { diceQuantity: "",
+                    diceValue: "" },
+      formValidity: { diceQuantity: false,
+                      diceValue: false }
+    });
+  }
+
+  handleCapSubmit = () => {
+    const tableId = this.state.currentTable[this.state.TABLE_ID_INDEX];
+    const data = { tableId };
+    client.send(JSON.stringify({
+      ...data,
+      type: "playercapevent"
+    }));
+
+    // Reset form values
+    this.setState({
+      formValues: { diceQuantity: "",
+                    diceValue: "" },
+      formErrors: { diceQuantity: "",
+                    diceValue: "" },
+      formValidity: { diceQuantity: false,
+                      diceValue: false }
+    });
+  }
+
+  handleStartNextRound = () => {
+    const tableId = this.state.currentTable[this.state.TABLE_ID_INDEX];
+    const data = { tableId };
+    client.send(JSON.stringify({
+      ...data,
+      type: "roundstartevent"
     }));
   }
 
- /* When content changes, we send the
- current content of the editor to the server. */
- onEditorStateChange = (text) => {
-   client.send(JSON.stringify({
-     type: "contentchange",
-     username: this.state.username,
-     content: text
-   }));
- };
-
- componentWillMount() {
-   client.onopen = () => {
+  componentWillMount() {
+    client.onopen = () => {
      console.log('WebSocket Client Connected');
-   };
-   client.onmessage = (message) => {
-     const dataFromServer = JSON.parse(message.data);
-     console.log(dataFromServer);
-     const stateToChange = {};
-     if (dataFromServer.type === "broadcastevent") {
-       stateToChange.currentplayers = Object.values(dataFromServer.data.players);
-       stateToChange.currentTables = Object.values(dataFromServer.data.tables);
-       stateToChange.playerActivity = dataFromServer.data.playerActivity;
-     } else if (dataFromServer.type === "tableregisterevent" || 
-                dataFromServer.type === "tablejoinevent") {
-       stateToChange.currentTable = Object.values(dataFromServer.data.currentTable);
-       stateToChange.playerPosition = Object.values(dataFromServer.data.currentTable.currentGame.players.length)
-     } else if (dataFromServer.type === "gamesetupevent") {
-      stateToChange.currentTable = Object.values(dataFromServer.data.currentTable);
-      stateToChange.gameReady = true;
-     }
-     this.setState({
-       ...stateToChange
-     });
-   };
- }
+    };
+    client.onmessage = (message) => {
+      const dataFromServer = JSON.parse(message.data);
+      console.log(dataFromServer);
+      const stateToChange = {};
+      if (dataFromServer.type === "broadcastevent") {
+        stateToChange.currentplayers = Object.values(dataFromServer.data.players);
+        stateToChange.currentTables = Object.values(dataFromServer.data.tables);
+        stateToChange.playerActivity = dataFromServer.data.playerActivity;
+      } else if (dataFromServer.type === "tableregisterevent" || 
+                 dataFromServer.type === "tablejoinevent") {
+        var currentTable = Object.values(dataFromServer.data.currentTable);
+        stateToChange.currentTable = currentTable;
+
+        // Only update player position if it is not yet defined
+        if (this.state.playerPosition == null) {
+          stateToChange.playerPosition = currentTable[this.state.TABLE_CURRENT_GAME_INDEX].players.length-1;
+        }
+      } else if (dataFromServer.type === "gamesetupevent"  ||
+                 dataFromServer.type === "playercallevent") {
+        stateToChange.currentTable = Object.values(dataFromServer.data.currentTable);
+        stateToChange.gameReady = true;
+      } else if (dataFromServer.type === "playercapevent" ) {
+        stateToChange.currentTable = Object.values(dataFromServer.data.currentTable);
+        stateToChange.revealDice = true;
+      } else if (dataFromServer.type === "roundstartevent") {
+        stateToChange.revealDice = false;
+      } else if (dataFromServer.type === "playerwinevent") {
+        stateToChange.currentTable = Object.values(dataFromServer.data.currentTable);
+        stateToChange.gameOver = true;
+      }
+      
+      this.setState({
+        ...stateToChange
+      });
+    };
+  }
 
   showLoginSection = () => (
     <div className="account">
       <div className="account__wrapper">
         <div className="account__card">
-          <div className="account__profile">
+          <div className="account__profile" id="register_player">
             <Identicon className="account__avatar" size={64} string="randomness" />
             <p className="account__name">Hello, player!</p>
           </div>
@@ -176,33 +231,47 @@ class App extends Component {
             <Identicon className="account__avatar" size={64} string="randomness" />
             <p className="account__name">{`Admin: ${this.state.username}`}</p>
           </div>
-          <input name="tablename" placeholder="Table name" ref={(input) => { this.tablename = input; }} className="form-control" />
-          <input name="numDice" placeholder="Starting umber of dice" ref={(input) => { this.numDice = input; }} className="form-control" />
-          <button type="button" onClick={() => this.addTable()} className="btn btn-primary account__btn">Register Table</button>
+          <div id="register_fields">
+            <input name="tablename" placeholder="Table name" ref={(input) => { this.tablename = input; }} className="form-control" />
+            <input type="number" name="numDice" placeholder="Starting umber of dice" ref={(input) => { this.numDice = input; }} className="form-control" />
+            <button type="button" onClick={() => this.addTable()} className="btn btn-primary account__btn">Register Table</button>
+          </div>
         </div>
       </div>
     </div>
   )
 
-  showTableJoinSection = () => (
-    <div className="row">
-      {this.state.currentTables.map(table => (
-        <div className="col-lg-6 col-md-6 col-s-12 mb-4">
-          <div className="card h-100">
-            <div className="card">
-              <div className="card-body" >
-                <p>{`Table: ${table.tablename}`}</p> 
-                <p>{`Admin: ${table.adminUsername}`}</p>
-                <p>{`Number of Players: ${table.currentGame.players.length}`}</p>
-                <p>{`Number of Dice/Player: ${table.dicePerPlayer}`}</p>
-                <button type="button" onClick={() => this.joinTable(table)} className="btn btn-primary account__btn">Join Table</button>
+  showTableJoinSection = () => {
+    var openTables = [];
+    this.state.currentTables.map(table => {
+      if (table.status === "open") {
+        openTables.push(table);
+      }
+    });
+
+    console.log("open table **");
+    console.log(openTables);
+
+    return (
+      <div className="row">
+        {openTables.map(table => (
+          <div className="col-lg-6 col-md-6 col-s-12 mb-4">
+            <div className="card h-100">
+              <div className="card">
+                <div className="card-body" >
+                  <p>{`Table: ${table.tablename}`}</p> 
+                  <p>{`Admin: ${table.adminUsername}`}</p>
+                  <p>{`Number of Players: ${table.currentGame.players.length}`}</p>
+                  <p>{`Number of Dice/Player: ${table.dicePerPlayer}`}</p>
+                  <button type="button" onClick={() => this.joinTable(table)} className="btn btn-primary account__btn">Join Table</button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      ))}
-    </div>
-  )
+        ))}
+      </div>
+    )
+  }
 
   showTableStatus = () => (
     <p>{`Status: Waiting for admin (${this.state.currentTable[this.state.TABLE_ADMIN_USERNAME_INDEX]}) to start game`}</p>
@@ -221,7 +290,7 @@ class App extends Component {
             <p className="account__name">{`Table Lobby: ${this.state.currentTable[this.state.TABLE_NAME_INDEX]}`}</p>
           </div>
           <p className="account__name">{`Number of Players: ${this.state.currentTable[this.state.TABLE_CURRENT_GAME_INDEX].players.length}`}</p>
-          <p className="account__name">{`Starting dice: ${this.state.currentTable[this.state.TABLE_DICE_PER_PLAYER_INDEX]}`}</p>
+          <p type="number" className="account__name">{`Starting dice: ${this.state.currentTable[this.state.TABLE_DICE_PER_PLAYER_INDEX]}`}</p>
           {this.state.tableAdmin ? this.showTableStartButton() : this.showTableStatus()}
         </div>
       </div>
@@ -231,31 +300,31 @@ class App extends Component {
   handleChange = ({ target }) => {
     const { formValues } = this.state;
     console.log(target);
-    formValues[target.name] = target.value;
+    formValues[target.name] = parseInt(target.value);
     this.setState({ formValues });
     this.handleValidation(target);
   };
 
   handleValidation = target => {
     const { name, value } = target;
-    console.log(value);
+    const numValue = parseInt(value); 
     const fieldValidationErrors = this.state.formErrors;
     const validity = this.state.formValidity;
     const previousCall = this.state.currentTable[this.state.TABLE_CURRENT_GAME_INDEX].previousTurn.call;
     if (name === "diceValue") {
       // Validate dice val
       const diceVals = [2,3,4,5,6];
-      validity[name] = diceVals.some(diceVal => diceVal == value);
+      validity[name] = diceVals.some(diceVal => diceVal == numValue);
       fieldValidationErrors[name] = validity[name]
         ? ""
         : `${name} is required, must be between 2-6`;
       
       // Validate increasing calls
       if ((validity[name]) && (previousCall != null)) {
-        var previousCallQuantity = previousCall.quantity
+        var previousCallQuantity = previousCall.diceQuantity
         var currentCallDiceQuantity = this.state.formValues["diceQuantity"];
         var previousCallDiceValue = previousCall.diceValue
-        var currentCallDiceValue = value
+        var currentCallDiceValue = numValue
 
         if (currentCallDiceQuantity == previousCallQuantity) {
           validity[name] = currentCallDiceValue > previousCallDiceValue;
@@ -266,22 +335,29 @@ class App extends Component {
       }
     } else if (name === "diceQuantity") {
       var floor = 1;
-      if (previousCall != null) {
-        var previousCallQuantity = previousCall.quantity
-        var currentCallDiceQuantity = this.state.formValues["diceQuantity"];
-        var previousCallDiceValue = previousCall.diceValue
+      validity[name] = true;
+      var previousCallDiceQuantity = 1;
 
-        if (currentCallDiceValue <= previousCallDiceValue) {
-          floor = previousCallQuantity + 1;
+      if (previousCall != null) {
+        previousCallDiceQuantity = previousCall.diceQuantity;
+        var currentCallDiceValue = this.state.formValues["diceValue"];
+        var currentCallDiceQuantity = numValue;
+        var previousCallDiceValue = previousCall.diceValue;
+
+        if (currentCallDiceQuantity < previousCallDiceQuantity) {
+          validity[name] = false;
+        } else if (currentCallDiceValue <= previousCallDiceValue) {
+          floor = previousCallDiceQuantity + 1;
+          validity[name] = currentCallDiceQuantity >= floor;
         } else {
-          floor = previousCallQuantity;
+          floor = previousCallDiceQuantity;
+          validity[name] = currentCallDiceQuantity >= floor;
         }
       }
     
-      validity[name] = value >= floor;
       fieldValidationErrors[name] = validity[name]
         ? ""
-        : `${name} must be at least ${previousCallDiceValue}`;
+        : `${name} must be at least ${floor}`;
     }
 
     this.setState({
@@ -290,25 +366,36 @@ class App extends Component {
     });
   };
 
-  handleSubmit = () => {
-    return null;
-  }
-
   showSubmitCallButton = () => {
     const { formValues, formValidity } = this.state;
     var validCall = Object.values(formValidity).every(Boolean)
     if (validCall) {
       return (
-          <button
-            type="submit"
-            className="btn btn-primary btn-block"
-            onClick={() => this.handleSubmit()}
-          >
-            Submit Call
+        <button
+          type="submit"
+          className="btn btn-primary btn-block"
+          onClick={() => this.handleCallSubmit()}
+        >
+          Submit Call
         </button>
       )
     } else {
       return null;
+    }
+  }
+
+  showCapButton = () => {
+    var previousCall = this.state.currentTable[this.state.TABLE_CURRENT_GAME_INDEX].previousTurn.call;
+    if (previousCall != null) {
+      return (
+        <button
+          type="submit"
+          className="btn btn-primary btn-block"
+          onClick={() => this.handleCapSubmit()}
+        >
+          Cap
+        </button>
+      )
     }
   }
 
@@ -318,6 +405,7 @@ class App extends Component {
         <input
           type="number"
           name="diceQuantity"
+          id="callDiceQuantity"
           className={`form-control ${this.state.formErrors.diceQuantity ? "is-invalid" : ""}`}
           placeholder="Dice Quantity"
           onChange={this.handleChange}
@@ -326,6 +414,7 @@ class App extends Component {
         <input
           type="number"
           name="diceValue"
+          id="callDiceValue"
           className={`form-control ${this.state.formErrors.diceValue ? "is-invalid" : ""}`}
           placeholder="Dice Value"
           onChange={this.handleChange}
@@ -334,7 +423,50 @@ class App extends Component {
         <div className="invalid-feedback">{this.state.formErrors.diceQuantity}</div>
         <div className="invalid-feedback">{this.state.formErrors.diceValue}</div>
       </div>
-      {this.showSubmitCallButton()}
+      <div>
+        {this.showSubmitCallButton()}
+        {this.showCapButton()}
+      </div>
+    </div>
+  )
+
+  showStartNextRoundButton = () => (
+    <button type="submit" className="btn btn-primary btn-block" onClick={() => this.handleStartNextRound()} >Start Next Round</button>
+  )
+
+  showEndOfRoundInfo = () => {
+    var capResult = this.state.currentTable[this.state.TABLE_CURRENT_GAME_INDEX].capResult;
+
+    return (
+      <div>
+        <p>{`Call: ${capResult.call.diceQuantity} ${capResult.call.diceValue}s`}</p>
+        <p>{`Actual Amount: ${capResult.correctDiceQuantity}`}</p>
+        <p>{`Winner: ${capResult.winnerName}`}</p>
+        <p>{`Loser: ${capResult.loserName}`}</p>
+        {this.state.tableAdmin ? this.showStartNextRoundButton() : null}
+      </div>
+    )
+  }
+
+  showCurrentRoundInfo = () => {
+    var currentGame = this.state.currentTable[this.state.TABLE_CURRENT_GAME_INDEX];
+
+    return (
+      <div>
+        <div>
+          {currentGame.currentTurn.position == this.state.playerPosition ? this.showCallForm() : null}
+        </div>
+        <div>
+          <p>{`Current Player: ${currentGame.players[currentGame.currentTurn.position].username}`}</p>
+          {currentGame.previousTurn.call != null ? <p>{`Current Call: ${currentGame.previousTurn.call.diceQuantity} ${currentGame.previousTurn.call.diceValue}s`}</p> : null}
+        </div>
+      </div>
+    )
+  }
+
+  showWinner = () => (
+    <div>
+      <p>{`Winner: ${this.state.currentTable[this.state.TABLE_CURRENT_GAME_INDEX].winnerName}`}</p>
     </div>
   )
 
@@ -345,13 +477,16 @@ class App extends Component {
           <div className="card h-100">
             <div className="card">
               <div className="card-body" >
-                <PlayerCup player={ player }/>
+                <PlayerCup revealDice={this.state.revealDice} 
+                           call={this.state.currentTable[this.state.TABLE_CURRENT_GAME_INDEX].previousTurn.call}
+                           player={player} 
+                           myPosition={this.state.playerPosition}/>
               </div>
             </div>
           </div>
         </div>
       ))}
-      {this.state.currentTable[this.state.TABLE_CURRENT_GAME_INDEX].currentTurn.position == this.state.playerPosition ? this.showCallForm() : null}
+      {this.state.revealDice ? this.showEndOfRoundInfo() : (this.state.gameOver ? this.showWinner() : this.showCurrentRoundInfo())}
     </div>
   )
 

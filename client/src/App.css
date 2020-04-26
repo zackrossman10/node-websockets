@@ -6,6 +6,10 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+.highlight {
+	color : '#00cc00';
+}
+
 .account {
 	 height: 100vh;
 	 width: 100%;
