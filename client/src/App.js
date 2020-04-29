@@ -12,8 +12,8 @@ import './App.css';
 import PlayerCup from "./component/PlayerCup.js";
 
 
-const client = new W3CWebSocket('ws://127.0.0.1:8000');
-// const client = new W3CWebSocket(' ws://ec2-52-15-169-240.us-east-2.compute.amazonaws.com:8000');
+// const client = new W3CWebSocket('ws://127.0.0.1:8000');
+const client = new W3CWebSocket(' ws://ec2-52-15-169-240.us-east-2.compute.amazonaws.com:8000');
 
 class App extends Component {
   constructor(props) {
