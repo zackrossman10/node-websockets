@@ -1,4 +1,4 @@
-import React, { Component } from 'react';
+import React from 'react';
 
 class Die extends React.Component {
   render() {
@@ -19,18 +19,15 @@ class Die extends React.Component {
 }
 
 class PlayerCup extends React.Component {
-  constructor(props) {
-    super(props);
-  }
 
   renderDie(displayVal) {
 
     if (displayVal == null) {
       return null;
-    } else if (this.props.myPosition != this.props.player.playerPosition && !this.props.revealDice) {
+    } else if (this.props.myPosition !== this.props.player.playerPosition && !this.props.revealDice) {
       return <Die value={"?"} highlight={false}/>;
     } else if (this.props.revealDice && (this.props.call != null && 
-              (parseInt(displayVal) == this.props.call.diceValue || parseInt(displayVal) == 1))) {
+              (parseInt(displayVal) === this.props.call.diceValue || parseInt(displayVal) === 1))) {
       // Highlight dice pertaining to the previous call
       return <Die value={displayVal} highlight={true}/>;
     } else {

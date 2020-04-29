@@ -4,19 +4,16 @@ import Identicon from 'react-identicons';
 import {
   Navbar,
   NavbarBrand,
-  UncontrolledTooltip
 } from 'reactstrap';
-import Editor from 'react-medium-editor';
 import 'medium-editor/dist/css/medium-editor.css';
 import 'medium-editor/dist/css/themes/default.css';
 import "bootstrap/dist/css/bootstrap.css";
 import './App.css';
 import PlayerCup from "./component/PlayerCup.js";
-import { NotificationManager } from "react-notifications";
 
 
-// const client = new W3CWebSocket('ws://127.0.0.1:8000');
-const client = new W3CWebSocket('ws://ec2-52-15-169-240.us-east-2.compute.amazonaws.com:8000');
+const client = new W3CWebSocket('ws://127.0.0.1:8000');
+// const client = new W3CWebSocket(' ws://ec2-52-15-169-240.us-east-2.compute.amazonaws.com:8000');
 
 class App extends Component {
   constructor(props) {
@@ -248,6 +245,7 @@ class App extends Component {
       if (table.status === "open") {
         openTables.push(table);
       }
+      return 0;
     });
 
     console.log("open table **");
@@ -315,7 +313,7 @@ class App extends Component {
     if (name === "diceValue") {
       // Validate dice val
       const diceVals = [2,3,4,5,6];
-      validity[name] = diceVals.some(diceVal => diceVal == numValue);
+      validity[name] = diceVals.some(diceVal => diceVal === numValue);
       fieldValidationErrors[name] = validity[name]
         ? ""
         : `${name} is required, must be between 2-6`;
@@ -327,7 +325,7 @@ class App extends Component {
         var previousCallDiceValue = previousCall.diceValue
         var currentCallDiceValue = numValue
 
-        if (currentCallDiceQuantity == previousCallQuantity) {
+        if (currentCallDiceQuantity === previousCallQuantity) {
           validity[name] = currentCallDiceValue > previousCallDiceValue;
           fieldValidationErrors[name] = validity[name]
             ? ""
@@ -341,9 +339,9 @@ class App extends Component {
 
       if (previousCall != null) {
         previousCallDiceQuantity = previousCall.diceQuantity;
-        var currentCallDiceValue = this.state.formValues["diceValue"];
-        var currentCallDiceQuantity = numValue;
-        var previousCallDiceValue = previousCall.diceValue;
+        currentCallDiceValue = this.state.formValues["diceValue"];
+        currentCallDiceQuantity = numValue;
+        previousCallDiceValue = previousCall.diceValue;
 
         if (currentCallDiceQuantity < previousCallDiceQuantity) {
           validity[name] = false;
@@ -368,7 +366,7 @@ class App extends Component {
   };
 
   showSubmitCallButton = () => {
-    const { formValues, formValidity } = this.state;
+    const { formValidity } = this.state;
     var validCall = Object.values(formValidity).every(Boolean)
     if (validCall) {
       return (
@@ -455,7 +453,7 @@ class App extends Component {
     return (
       <div>
         <div>
-          {currentGame.currentTurn.position == this.state.playerPosition ? this.showCallForm() : null}
+          {currentGame.currentTurn.position === this.state.playerPosition ? this.showCallForm() : null}
         </div>
         <div>
           <p>{`Current Player: ${currentGame.players[currentGame.currentTurn.position].username}`}</p>
@@ -493,7 +491,6 @@ class App extends Component {
 
   render() {
     const {
-      currentTables,
       username,
       tableAdmin,
       currentTable,
