@@ -1,3 +1,5 @@
+Liar's Dice Implementation (BETA)
+
 To start the server, inside server directory:
 
 1. Do `npm install`
